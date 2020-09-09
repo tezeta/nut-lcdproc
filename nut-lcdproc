@@ -1,0 +1,95 @@
+#!/usr/bin/env python2
+#nut-lcdproc
+#tezeta 2020
+
+import nut2,time,screen,argparse
+from nut2 import PyNUTClient
+from lcdproc.server import Server
+
+args = argparse.ArgumentParser(description='nut screen for lcdproc')
+args.add_argument('-d', '--debug', action='store_true', default=False, help='Enable debug output')
+args.add_argument('-u', '--ups', required=True, help='UPS to use')
+args.add_argument('-s', '--server', default='localhost', help='lcdproc server (default: localhost)')
+args.add_argument('-p', '--poll', default='5', help='update frequency in seconds (default: 5.0)')
+options = args.parse_args()
+	
+debugEnable = options.debug
+upsname= options.ups
+server = options.server
+poll = float(options.poll)
+
+def main():
+	try:
+                debug("Attempting to access UPS " + upsname)
+		ups = PyNUTClient()
+	        debug(ups.list_vars(upsname))
+                debug("Connecting to lcdproc server at " + server)
+        	lcd = Server(server,debug=False)
+        	debug(lcd.start_session())
+	except nut2.PyNUTError:
+		print("Failed to connect to ups: " + upsname)
+	        exit(1)
+        except:
+                print("Failed to connect to lcdproc server")
+                exit(1)
+        
+        print("Screen running on lcdproc server " + server + " (" + str(poll) + "s update freq) using UPS name " + upsname)
+
+        nut_screen = lcd.add_screen("nut")
+	nut_screen.set_heartbeat("on")
+   
+	#decoration
+        nut_screen.add_string_widget("status_label",text="status:",x=1,y=2)
+        nut_screen.add_string_widget("battery_spacerl",text="|",x=11,y=3)
+        nut_screen.add_string_widget("bar_bracket_l",text="[             ]",x=6,y=4)
+
+	#variables
+	ups_label = nut_screen.add_title_widget("ups_label", text=ups.get_var(upsname,"ups.model").encode('utf-8'))
+
+        ups_status = nut_screen.add_scroller_widget("ups_status", text=getinfo(ups,"status"), left=9,top=2,right=20)
+	ups_voltage_input = nut_screen.add_string_widget("ups_voltage_input",text=getinfo(ups,"voltage")+"v in", x=1,y=3)
+        ups_battery_runtime = nut_screen.add_string_widget("battery_runtime",text=getinfo(ups,"time_remaining"),x=13,y=3)
+        ups_battery_percent = nut_screen.add_string_widget("battery_percent",text=getinfo(ups,"percent")+"%",x=1,y=4)
+        barlen = int(getinfo(ups,"percent")) * 65 / 100
+        ups_battery_bar = nut_screen.add_hbar_widget("battery_bar", x=7, y=4, length=barlen)
+
+	debug("Screen created, sleeping for " + str(poll) + " seconds")
+	time.sleep(poll)
+
+	while True:
+            ups_status.set_text(getinfo(ups,"status"))
+            ups_voltage_input.set_text(getinfo(ups,"voltage")+"v in")
+            ups_battery_runtime.set_text(getinfo(ups,"time_remaining"))
+            ups_battery_percent.set_text(getinfo(ups,"percent")+"%")
+            barlen = int(getinfo(ups,"percent")) * 65 / 100
+            ups_battery_bar.set_length(barlen)
+            debug("Updated screen, sleeping " + str(poll) + " seconds")
+            time.sleep(poll)
+
+def getinfo(ups, element):
+        elements = {
+            'model':ups.get_var(upsname,"ups.model"),
+            'status':ups.get_var(upsname,"ups.status"),
+            'voltage':ups.get_var(upsname,"input.voltage"),
+            'time_remaining':timeconvert(int(ups.get_var(upsname,"battery.runtime"))),
+            'percent':ups.get_var(upsname,"battery.charge")
+            }  
+        return debug(elements.get(element,"null").encode('utf-8'))
+
+def timeconvert(seconds): 
+ 	seconds = seconds % (24 * 3600) 
+	hour = seconds // 3600
+	seconds %= 3600
+	minutes = seconds // 60
+	seconds %= 60
+      
+    	return "%dh%02dm%02ds" % (hour, minutes, seconds)
+
+def debug(msg):
+	if debugEnable:
+		print('[DEBUG] ' + str(msg))
+        return msg
+
+
+if __name__ == "__main__":
+	main()

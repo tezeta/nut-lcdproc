@@ -1,0 +1,42 @@
+#!/sbin/openrc-run
+# Copyright 1999-2020 Gentoo Authors
+# Distributed under the terms of the GNU General Public License v2
+
+instance="${SVCNAME}"
+name="nut-lcdproc (${instance})"
+pidfile="/run/${instance}.pid"
+
+ionice=3
+nice=5
+
+command="/usr/bin/nut-lcdproc"
+command_args="-u rs1000g"
+
+depend() {
+	need LCDd upsd
+}
+
+start()
+{
+  ebegin "Starting" ${instance}
+  start-stop-daemon --start \
+    --exec ${command} \
+    --pidfile ${pidfile} \
+    --background \
+    --make-pidfile \
+    --ionice ${ionice} \
+    --nice ${nice} \
+    -- ${command_args}
+    #--stdout ${LOG} \
+    #--stderr ${LOG}
+   eend $?
+}
+
+stop()
+{
+  ebegin "Stopping" ${instance}
+  start-stop-daemon --stop \
+    --exec ${command} \
+    --pidfile ${pidfile}
+  eend $retval
+}
